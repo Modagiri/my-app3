@@ -1,5 +1,12 @@
-import { ipcRenderer } from 'electron';
+import { ipcRenderer, contextBridge } from 'electron';
 
-ipcRenderer.on('file-opened', (_, file, content) => {
-    console.log('file-opened', { file, content });
+contextBridge.exposeInMainWorld('api', {
+    showOpenDialog: () => {
+        ipcRenderer.send('show-open-dialog');
+    },
+    onFileOpen: (callback) => {
+        ipcRenderer.on('file-opened', (_, content) => {
+            callback(content);
+        });
+    }
 });

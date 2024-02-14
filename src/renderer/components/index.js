@@ -1,1 +1,4 @@
-export { default as Home } from "./Home";
+
+window.api.onFileOpen((content) => {
+
+})

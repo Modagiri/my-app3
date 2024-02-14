@@ -1,6 +1,10 @@
 const { app, BrowserWindow, ipcMain, WebContents, dialog, shell } = require('electron');
 const path = require('path');
 const {readFile} = require('node:fs/promises');
+const XLSX = require("xlsx");
+const sapData = [];
+const jiraData = [];
+const readXlsxFile = require('read-excel-file/node')
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -23,17 +27,26 @@ const createWindow = () => {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     mainWindow.focus();
-    showOpenDialog(mainWindow);
+    //showOpenDialog(mainWindow);
   });
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
 };
 
+ipcMain.on('show-open-dialog', (event) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (!browserWindow) return;
+
+  showOpenDialog(browserWindow);
+});
+
+
 const showOpenDialog = async (browserWindow) => {
   const result = await dialog.showOpenDialog(browserWindow, {
     properties: ['openFile'],
-    filters: [{ name: 'Text', extensions: ['txt'] }],
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
   });
 
   if (result.canceled) return;
@@ -44,12 +57,65 @@ const showOpenDialog = async (browserWindow) => {
   openFile(browserWindow, filePath);
 };
 
-const openFile = async (browserWindow, filePath) => {
-  const fileContent = await readFile(filePath, 'utf-8');
-  console.log(filePath);
-  console.log(fileContent);
-  browserWindow.webContents.send('file-opened', fileContent, filePath);
+const openFile = (browserWindow, filePath) => {
+  if(filePath.includes('jira')) {
+    openJiraFile(browserWindow, filePath);
+  } else {
+    openSapFile(browserWindow, filePath);
+  }
 };
+
+const openSapFile = async (browserWindow, filePath) => {
+  const fileContent = await readFile(filePath);
+  console.log(filePath);
+  const workbook = XLSX.read(fileContent);
+  const sheetNames = workbook.SheetNames;
+  const sheetName = sheetNames[0];
+  var jsa = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+  jsa2 = jsa.slice(8, jsa.length)
+  jsa2.forEach(e => {
+    e['Activity Report'] = convertDateFromExcel(e['Activity Report'])
+  })
+
+  jsa2.forEach(e => {
+    if(isProsjektAktivitet(e)) {
+      console.log(e)
+    }
+  })
+  console.log(workbook.SheetNames);
+  browserWindow.webContents.send('file-opened', fileContent, filePath);
+}
+
+const convertDateFromExcel  = (excelDate) => {
+  // Get the number of milliseconds from Unix epoch.
+  const unixTime = (excelDate - 25569) * 86400 * 1000;
+  return new Date(unixTime);
+}
+
+const openJiraFile = async (browserWindow, filePath) => {
+  const fileContent = await readFile(filePath);
+  console.log(filePath);
+  const workbook = XLSX.read(fileContent);
+  const sheetNames = workbook.SheetNames;
+  const sheetName = sheetNames[0];
+  let jsa = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+  console.log(jsa);
+
+  /*
+  var jsa = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+  jsa2 = jsa.slice(8, jsa.length)
+  jsa.forEach( e => console.log(e))
+   */
+  console.log(workbook.SheetNames);
+  browserWindow.webContents.send('file-opened', fileContent, filePath);
+}
+
+const isProsjektAktivitet = (aktvitet) => {
+  if(aktvitet?.__EMPTY && aktvitet?.__EMPTY_1 && (aktvitet.__EMPTY === aktvitet.__EMPTY_1)) {
+    return true;
+  }
+  return false;
+}
 
 
 // This method will be called when Electron has finished
